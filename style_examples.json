@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "entry": "https://example.test/notices/start",
+  "responses": [
+    {
+      "request": "https://example.test/notices/start",
+      "final": "https://example.test/docs/main.html",
+      "body": "<link rel=\"stylesheet\" href=\"/go/a.css\"><style>p{background:url(inline.png#h)}</style>"
+    },
+    {
+      "request": "https://example.test/go/a.css",
+      "final": "https://example.test/assets/a.css",
+      "body": "@import \"b.css\";a{background:url(../img/p.png#mark)}"
+    },
+    {
+      "request": "https://example.test/assets/b.css",
+      "final": "https://example.test/assets/b.css",
+      "body": "@import \"/go/a.css\";b{content:\"url(fake)\"}"
+    },
+    {
+      "request": "https://example.test/img/p.png",
+      "final": "https://example.test/img/p.png",
+      "body": "P"
+    },
+    {
+      "request": "https://example.test/docs/inline.png",
+      "final": "https://example.test/docs/inline.png",
+      "body": "I"
+    }
+  ],
+  "expected": {
+    "requests_each_once": [
+      "https://example.test/notices/start",
+      "https://example.test/go/a.css",
+      "https://example.test/assets/b.css",
+      "https://example.test/img/p.png",
+      "https://example.test/docs/inline.png"
+    ],
+    "external_css_base": "https://example.test/assets/a.css",
+    "inline_base": "https://example.test/docs/main.html",
+    "css_cycle": [
+      "https://example.test/go/a.css",
+      "https://example.test/assets/b.css"
+    ],
+    "binary_targets": [
+      {
+        "body": "P",
+        "fragment": "mark"
+      },
+      {
+        "body": "I",
+        "fragment": "h"
+      }
+    ],
+    "fake_url_requested": false
+  },
+  "alias_case": {
+    "requests": [
+      "https://example.test/red.css",
+      "https://example.test/blue.css"
+    ],
+    "same_final": "https://example.test/assets/shared.css",
+    "bodies": [
+      "a{color:red}",
+      "a{color:blue}"
+    ],
+    "expected": "两请求各取一次且各自保留正文，两条本地引用不得串用。"
+  },
+  "failure_cases": [
+    "将b.css响应改为404，capture_styles抛CaptureError，已发布旧成果不变。",
+    "停用HTTP，重开归档后核验与导出成功，HTTP调用数为0。",
+    "篡改已保存的a.css原body，核验与导出抛IntegrityError。",
+    "writer在写出第二份资源时抛异常，本次目标清理，相邻用户文件及旧成果保留。"
+  ]
+}

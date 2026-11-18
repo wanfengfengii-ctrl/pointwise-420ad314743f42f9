@@ -1,0 +1,153 @@
+{
+  "html": [
+    {
+      "text": "中文<img src=\"p?a=1&amp;b=2\"><img src='p'><img src=p>",
+      "sources": [
+        "p?a=1&b=2",
+        "p",
+        "p"
+      ]
+    },
+    {
+      "text": "<!-- <img src='fake'> --><script>\"<img src='fake'>\"</script><style>/* <img src='fake'> */</style><img alt='no source'>",
+      "sources": []
+    },
+    {
+      "text": "<link rel=\"stylesheet\" href=\"a.css\"><style>a{background:url(p)}</style><img src=\"x#mark\">",
+      "sources": [
+        "x#mark"
+      ]
+    }
+  ],
+  "css": {
+    "subset": {
+      "input": "Strict UTF-8; token offsets are Unicode character half-open intervals. A URL token covers the entire value including quotes when present.",
+      "recognition": "Outside comments and ordinary strings, recognize case-insensitive CSS-decoded url identifiers followed by optional whitespace and '('; recognize case-insensitive @import followed by a string or url function and a terminating semicolon. An import-url produces one import token.",
+      "escapes": "CSS backslash escapes: 1-6 hex digits with optional single whitespace terminator, or one non-hex non-newline character. Quoted strings may use backslash-newline continuation. Reject NUL, surrogate, out-of-range or zero escaped code points and dangling backslashes.",
+      "url_values": "Quoted values allow escaped characters, reject unescaped newlines. Unquoted values allow escaped characters, reject quotes, unescaped whitespace inside a value, controls and unescaped parentheses. Optional whitespace is allowed before and after the single value. Empty URL values are invalid.",
+      "imports": "Only @import string; and @import url(value); are supported, with whitespace/comments between import and its value and before ';'. Reject media conditions, layer and supports. Imports in this subset occur at top level before ordinary rules.",
+      "opaque_content": "Ordinary declarations and selectors are opaque except for recognized url calls. Comments and non-import strings never produce URL tokens. Reject unterminated comment, string, import or recognized url call. No @font-face, script, CSS expressions or nested at-rules.",
+      "separation": "These are lexical facts only. They contain no URL base, request identity, dependency closure or offline replacement."
+    },
+    "valid": [
+      {
+        "text": "a{background:url(\"icons/a.png#mark\")}",
+        "tokens": [
+          {
+            "kind": "url",
+            "start": 17,
+            "end": 35,
+            "raw": "\"icons/a.png#mark\"",
+            "decoded": "icons/a.png#mark"
+          }
+        ]
+      },
+      {
+        "text": "@import \"base.css\";",
+        "tokens": [
+          {
+            "kind": "import",
+            "start": 8,
+            "end": 18,
+            "raw": "\"base.css\"",
+            "decoded": "base.css"
+          }
+        ]
+      },
+      {
+        "text": "@import url('base.css');",
+        "tokens": [
+          {
+            "kind": "import",
+            "start": 12,
+            "end": 22,
+            "raw": "'base.css'",
+            "decoded": "base.css"
+          }
+        ]
+      },
+      {
+        "text": "/* url(fake) */ a{content:\"url(fake)\";background:URL(icons/a.png)}",
+        "tokens": [
+          {
+            "kind": "url",
+            "start": 53,
+            "end": 64,
+            "raw": "icons/a.png",
+            "decoded": "icons/a.png"
+          }
+        ]
+      },
+      {
+        "text": "a{background:u\\72l(icons/\\70.png)}",
+        "tokens": [
+          {
+            "kind": "url",
+            "start": 19,
+            "end": 32,
+            "raw": "icons/\\70.png",
+            "decoded": "icons/p.png"
+          }
+        ]
+      },
+      {
+        "text": "@import/*gap*/\"theme.css\";",
+        "tokens": [
+          {
+            "kind": "import",
+            "start": 14,
+            "end": 25,
+            "raw": "\"theme.css\"",
+            "decoded": "theme.css"
+          }
+        ]
+      },
+      {
+        "text": "a{background:url('a\\)b.png')}",
+        "tokens": [
+          {
+            "kind": "url",
+            "start": 17,
+            "end": 27,
+            "raw": "'a\\)b.png'",
+            "decoded": "a)b.png"
+          }
+        ]
+      },
+      {
+        "text": "a{content:\"url(fake)\"} /* @import \"fake\"; */",
+        "tokens": []
+      }
+    ],
+    "invalid": [
+      {
+        "text": "@import url(a.css) screen;",
+        "reason": "media condition outside subset"
+      },
+      {
+        "text": "a{background:url()}",
+        "reason": "empty URL"
+      },
+      {
+        "text": "a{background:url(a b)}",
+        "reason": "unescaped whitespace inside URL"
+      },
+      {
+        "text": "a{background:url(\"unterminated)}",
+        "reason": "unterminated quoted URL"
+      },
+      {
+        "text": "/* unterminated",
+        "reason": "unterminated comment"
+      },
+      {
+        "text": "@import \"x.css\"",
+        "reason": "missing import semicolon"
+      },
+      {
+        "text": "a{background:url(\\0)}",
+        "reason": "zero escape"
+      }
+    ]
+  }
+}

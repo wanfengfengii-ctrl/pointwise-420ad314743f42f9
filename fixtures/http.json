@@ -1,0 +1,36 @@
+{
+  "sources": [
+    {"entry_id": "water-level", "url": "https://river.test/today"},
+    {"entry_id": "notice", "url": "https://river.test/second"}
+  ],
+  "events": [
+    {
+      "request_url": "https://river.test/today",
+      "final_url": "https://river.test/bulletins/day/index.html",
+      "status": 200,
+      "headers": [["Content-Type", "text/html; charset=utf-8"]],
+      "body_text": "<h1>水位公告</h1><!-- pic.png --><img src=\"pic.png#north\"><img src='pic.png#south'><img src=\"empty.bin\">"
+    },
+    {
+      "request_url": "https://river.test/bulletins/day/pic.png",
+      "final_url": "https://cdn.river.test/pixel.png",
+      "status": 200,
+      "headers": [["Content-Type", "image/png"]],
+      "body_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000b49444154789c6360000200000500017a5eab3f0000000049454e44ae426082"
+    },
+    {
+      "request_url": "https://river.test/bulletins/day/empty.bin",
+      "final_url": "https://river.test/bulletins/day/empty.bin",
+      "status": 200,
+      "headers": [],
+      "body_hex": ""
+    },
+    {
+      "request_url": "https://river.test/second",
+      "final_url": "https://river.test/second",
+      "status": 200,
+      "headers": [],
+      "body_text": "<p>No illustrations today.</p>"
+    }
+  ]
+}
