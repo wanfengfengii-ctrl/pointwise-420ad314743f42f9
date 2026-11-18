@@ -1,9 +1,20 @@
+"""Offline export of a verified capture.
+
+``export_capture`` accepts both V1 captures and style captures and returns the
+relative HTML entry path inside the delivery directory.
+"""
+
 from dataclasses import dataclass
 from pathlib import Path
-from html import escape
+from html import escape as html_escape
 import shutil
-from webcapture.delivery.verification import verify_capture
+from webcapture.archive.manifests import ManifestStore, is_style_payload
+from webcapture.archive.publication import PublicationStore
 from webcapture.delivery.paths import plan_export_paths, local_image_reference, ensure_relative_output
+from webcapture.delivery.verification import verify_capture
+
+IMAGE_PATH = "image-{ordinal:04d}.bin"
+ENTRY_PATH = "index.html"
 
 
 def write_file_exclusive(path: Path, body: bytes) -> None:
@@ -28,6 +39,7 @@ class ExportCandidate:
         if not self.owned or self.state != "writing":
             raise ValueError("export candidate is not writable")
         path = self.target.joinpath(*ensure_relative_output(relative).split("/"))
+        path.parent.mkdir(parents=True, exist_ok=True)
         writer(path, body)
 
     def deliver(self) -> None:
@@ -47,17 +59,13 @@ class ExportCandidate:
 def rewrite_direct_images(verified, plan) -> bytes:
     text = verified.html.text
     for reference in reversed(verified.view.manifest.references):
-        replacement = '"' + escape(local_image_reference(
+        replacement = '"' + html_escape(local_image_reference(
             plan, reference.request_url, reference.fragment), quote=True) + '"'
         text = text[:reference.start] + replacement + text[reference.end:]
     return text.encode("utf-8")
 
 
-def export_capture(archive, capture_id: str, target, *, writer=write_file_exclusive) -> str:
-    target = Path(target)
-    if target.exists() or target.is_symlink():
-        raise FileExistsError(str(target))
-    verified = verify_capture(archive, capture_id)
+def _export_page(verified, target, writer) -> str:
     plan = plan_export_paths(verified)
     derived = rewrite_direct_images(verified, plan)
     candidate = ExportCandidate(target)
@@ -71,3 +79,17 @@ def export_capture(archive, capture_id: str, target, *, writer=write_file_exclus
     except BaseException:
         candidate.abort()
         raise
+
+
+def export_capture(archive, capture_id: str, target, *, writer=write_file_exclusive) -> str:
+    target = Path(target)
+    if target.exists() or target.is_symlink():
+        raise FileExistsError(str(target))
+    PublicationStore(archive).require_published(capture_id)
+    with archive.transaction():
+        raw = ManifestStore(archive).verified_raw(capture_id)
+        style = is_style_payload(raw)
+    if style:
+        from webcapture.delivery.style_export import export_style_capture
+        return export_style_capture(archive, capture_id, target, writer=writer)
+    return _export_page(verify_capture(archive, capture_id), target, writer)

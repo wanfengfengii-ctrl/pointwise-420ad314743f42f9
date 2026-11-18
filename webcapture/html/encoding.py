@@ -22,14 +22,23 @@ class DecodedHtml:
         return index
 
 
-def decode_html(body: bytes) -> DecodedHtml:
+def decode_text(body: bytes, what: str = "document") -> DecodedHtml:
+    """Strictly decode a UTF-8 body and index its character boundaries."""
     if not isinstance(body, bytes):
-        raise ValueError("HTML body must be bytes")
+        raise ValueError(f"{what} body must be bytes")
     try:
         text = body.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
-        raise ValueError("HTML is not strict UTF-8") from exc
+        raise ValueError(f"{what} is not strict UTF-8") from exc
     offsets = [0]
     for character in text:
         offsets.append(offsets[-1] + len(character.encode("utf-8")))
     return DecodedHtml(body, text, tuple(offsets))
+
+
+def decode_html(body: bytes) -> DecodedHtml:
+    return decode_text(body, "HTML")
+
+
+def decode_css(body: bytes) -> DecodedHtml:
+    return decode_text(body, "CSS")

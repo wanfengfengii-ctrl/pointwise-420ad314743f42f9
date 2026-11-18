@@ -12,7 +12,21 @@
 
 V1只处理 img 的 src：单双引号、无引号值、字符引用、重复出现。重复src、空值、非HTTP(S)目标、URL空白、控制符及凭据URL拒绝。缺少src不产生引用。注释、文本、script/style中的伪标签不采集。不使用HTML base标签改变基址；直接图片始终按HTML响应最终URL解析。HTML标签及属性使用HTMLParser识别，并对受支持的属性词法进行明确校验；不保证修复畸形HTML。出现位置是解码文本中的字符区间，覆盖完整属性值令牌，包含原引号；不能当作UTF-8字节偏移。
 
-不执行脚本，不采集CSS、stylesheet、iframe、srcset、字体或远程脚本，不保证浏览器视觉一致性。fixtures/lexical.json 公开有限词法材料；其中CSS事实不参与V1业务处理。
+不执行脚本，不采集CSS、stylesheet、iframe、srcset、字体或远程脚本，不保证浏览器视觉一致性。fixtures/lexical.json 公开有限词法材料；其中CSS事实不参与V1业务处理。V1 的这些限制保持不变；CSS 与样式资源由独立的样式成果入口处理，见下节。
+
+## 样式成果（V2 增量）
+
+在 V1 闭环上新增 `CaptureService.capture_styles(entry_url)` 及等价函数
+`capture_styles(archive,http,entry_url)`，采集 HTML、直接图片和有限的样式依赖
+（`link[rel~=stylesheet]`、`style` 元素、`style` 属性、CSS 的 `url(...)` 与
+`@import`）。`export_capture` 自动识别 V1 或样式成果，二者都返回成果内相对
+HTML 入口。`read_capture` 与 `verify_capture` 仍不接收 HTTP 端口。
+
+请求身份（去 fragment 的规范绝对 URL）与响应基址（最终地址）分别保存；
+一次样式采集里每个请求至多调用 HTTP 一次；同一请求的多重角色（HTML/CSS/二进制）
+各写一份本地文件。依赖可循环且必须完整收齐，每次引用保留 fragment。原响应
+字节不变，失败不发布半份成果，旧成果不受影响。停用来源重开后仍可核验与导出；
+损坏或缺失证据抛原 `IntegrityError`。完整交接说明见 `HANDOFF.md`。
 
 ## 公开 Python API
 
@@ -47,7 +61,7 @@ ArchiveStore只创建新库或打开兼容版本；重复initialize和重开不�
 
 ## 模块与回归
 
-sources负责输入形状、HTTP身份与响应接纳；html负责UTF-8、字符位置令牌和直接图片解释；capture拥有候选状态、图片资源及完整性；archive负责SQLite、证据和固定发布；delivery负责快照、复核、路径与导出；batches负责规范清单、身份、成果关系及有序交付目录。24个生产模块均由公开流程调用。
+sources负责输入形状、HTTP身份与响应接纳；html负责UTF-8、字符位置令牌、CSS 有限词法与两类文档解释；capture拥有候选状态、图片/样式依赖图及完整性；archive负责SQLite、证据和固定发布（V1 与样式清单）；delivery负责快照、复核、路径与导出；batches负责规范清单、身份、成果关系及有序交付目录。34个生产模块均由公开流程调用。
 
 ```sh
 python3.11 -B run.py verify
@@ -55,8 +69,10 @@ python3.11 -B run.py demo
 python3.11 -B -m unittest discover -s tests -v
 ```
 
-verify返回完整七个测试文件的真实退出码。demo读取fixtures/http.json，在测试临时目录实际采集两条公告，关闭SQLite、停用来源，再重开复核和导出，核对本地图片与目录顺序后输出POINTWISE_SCENARIO JSON；临时成果随后清理。它没有访问公网。
+verify返回完整八个测试文件的真实退出码。demo读取fixtures/http.json，在测试临时目录实际采集两条公告，关闭SQLite、停用来源，再重开复核和导出，核对本地图片与目录顺序；随后按style_examples.json实际创建样式成果，同样关闭、停用来源、重开核验与导出，逐条按角色核对共享二进制、循环 CSS 与 fragment，输出两条POINTWISE_SCENARIO JSON；临时成果随后清理。它没有访问公网。
 
 测试覆盖有序来源、规范化、空批次、身份顺序、受控身份冲突、重收、同URL不同条目、部分失败、重定向基址、最终地址别名、fragment、多次出现、零字节、无图片、根响应复用、候选状态、严格UTF-8、中文位置、伪引用、真实SQLite触发器事务失败、损坏、缺失正文、悬空关系、清单篡改、重复初始化、路径碰撞、精确改写、已有目标和部分写入清理。
+
+测试覆盖有序来源、规范化、空批次、身份顺序、受控身份冲突、重收、同URL不同条目、部分失败、重定向基址、最终地址别名、fragment、多次出现、零字节、无图片、根响应复用、候选状态、严格UTF-8、中文位置、伪引用、真实SQLite触发器事务失败、损坏、缺失正文、悬空关系、清单篡改、重复初始化、路径碰撞、精确改写、已有目标和部分写入清理；样式侧另覆盖 CSS 有限词法正反例、手算请求图与导出、循环导入、重定向基址、最终地址别名、内联上下文与转义、伪引用、同一请求多角色、长链与失败保全。
 
 所有样例和断言有限且确定；成果ID是归档内不透明身份，不承诺跨新归档一致。测试临时目录仅用于测试自身数据库和导出，原始样例文件不会被修改。

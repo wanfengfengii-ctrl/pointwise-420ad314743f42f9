@@ -60,6 +60,15 @@ def manifest_bytes(manifest: CaptureManifest) -> bytes:
                       separators=(",", ":")).encode("utf-8")
 
 
+def is_style_payload(raw: bytes) -> bool:
+    """True when fixed manifest bytes belong to a style capture."""
+    try:
+        value = json.loads(raw)
+    except (ValueError, UnicodeError):
+        return False
+    return isinstance(value, dict) and value.get("kind") == "styles"
+
+
 class ManifestStore:
     def __init__(self, archive):
         self.archive = archive
@@ -69,24 +78,34 @@ class ManifestStore:
             raise IntegrityError("manifest staging requires a transaction")
         validate_manifest_structure(manifest)
         payload = manifest_bytes(manifest)
+        return self._record(capture_id, payload)
+
+    def _record(self, capture_id: str, payload: bytes) -> str:
         digest = hashlib.sha256(payload).hexdigest()
         self.archive.connection.execute(
             "INSERT INTO manifests(capture_id,payload,digest) VALUES(?,?,?)",
             (capture_id, payload.decode("utf-8"), digest))
         return digest
 
-    def read(self, capture_id: str) -> CaptureManifest:
+    def verified_raw(self, capture_id: str) -> bytes:
+        """Return the fixed manifest bytes after checking both recorded digests."""
         row = self.archive.connection.execute(
             "SELECT payload,digest FROM manifests WHERE capture_id=?", (capture_id,)).fetchone()
         publication = self.archive.connection.execute(
             "SELECT manifest_digest FROM publications WHERE capture_id=?", (capture_id,)).fetchone()
         if row is None or publication is None:
             raise IntegrityError("missing fixed manifest")
+        if not isinstance(row["payload"], str) or not isinstance(row["digest"], str):
+            raise IntegrityError("invalid stored manifest")
+        raw = row["payload"].encode("utf-8")
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != row["digest"] or digest != publication["manifest_digest"]:
+            raise IntegrityError("manifest digest mismatch")
+        return raw
+
+    def read(self, capture_id: str) -> CaptureManifest:
+        raw = self.verified_raw(capture_id)
         try:
-            raw = row["payload"].encode("utf-8")
-            digest = hashlib.sha256(raw).hexdigest()
-            if digest != row["digest"] or digest != publication["manifest_digest"]:
-                raise IntegrityError("manifest digest mismatch")
             value = json.loads(raw)
             if set(value) != {"html_evidence_id", "images", "references"}:
                 raise ValueError("unknown manifest fields")

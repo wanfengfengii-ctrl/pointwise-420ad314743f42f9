@@ -5,6 +5,7 @@ from webcapture.html.encoding import DecodedHtml
 
 _NAME = re.compile(r"[^\s=/>]+")
 _SPACE = " \t\r\n\f"
+_RAW_CLOSE = re.compile(r"</style(?=[\t\n\r\f />])", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -25,9 +26,21 @@ class HtmlTag:
 
 
 @dataclass(frozen=True)
+class RawTextBlock:
+    tag: str
+    tag_start: int
+    tag_end: int
+    content_start: int
+    content_end: int
+    content: str
+    closed: bool
+
+
+@dataclass(frozen=True)
 class HtmlDocument:
     decoded: DecodedHtml
     tags: tuple[HtmlTag, ...]
+    raw_blocks: tuple[RawTextBlock, ...] = ()
 
 
 def _attributes(raw: str, absolute: int) -> tuple[HtmlAttribute, ...]:
@@ -83,15 +96,20 @@ def _attributes(raw: str, absolute: int) -> tuple[HtmlAttribute, ...]:
 class _Parser(HTMLParser):
     def __init__(self, text):
         super().__init__(convert_charrefs=False)
+        self.text = text
         self.line_starts = [0]
         for index, character in enumerate(text):
             if character == "\n":
                 self.line_starts.append(index + 1)
         self.tags = []
+        self.raw_blocks = []
+
+    def _position(self) -> int:
+        line, column = self.getpos()
+        return self.line_starts[line - 1] + column
 
     def handle_starttag(self, tag, attrs):
-        line, column = self.getpos()
-        start = self.line_starts[line - 1] + column
+        start = self._position()
         raw = self.get_starttag_text()
         self.tags.append(HtmlTag(tag.lower(), start, start + len(raw),
                                  _attributes(raw, start)))
@@ -99,9 +117,40 @@ class _Parser(HTMLParser):
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
 
+    def handle_data(self, data):
+        if self.cdata_elem != "style":
+            return
+        content_start = self._position()
+        content_end = content_start + len(data)
+        if self.text[content_start:content_end] != data:
+            raise ValueError("raw style text disagrees with the document")
+        close = _RAW_CLOSE.match(self.text, content_end)
+        self.raw_blocks.append(RawTextBlock(
+            "style", 0, 0, content_start, content_end, data, close is not None))
+
 
 def parse_document(decoded: DecodedHtml) -> HtmlDocument:
     parser = _Parser(decoded.text)
     parser.feed(decoded.text)
     parser.close()
-    return HtmlDocument(decoded, tuple(parser.tags))
+    merged = []
+    for block in parser.raw_blocks:
+        if (merged and merged[-1].tag == block.tag
+                and merged[-1].content_end == block.content_start):
+            previous = merged[-1]
+            merged[-1] = RawTextBlock(block.tag, previous.tag_start, previous.tag_end,
+                                      previous.content_start, block.content_end,
+                                      previous.content + block.content, block.closed)
+        else:
+            merged.append(block)
+    blocks = []
+    for block in merged:
+        openers = [tag for tag in parser.tags
+                   if tag.name == block.tag and tag.end == block.content_start]
+        if len(openers) != 1:
+            raise ValueError("raw text block without one start tag")
+        opener = openers[0]
+        blocks.append(RawTextBlock(block.tag, opener.start, opener.end,
+                                   block.content_start, block.content_end,
+                                   block.content, block.closed))
+    return HtmlDocument(decoded, tuple(parser.tags), tuple(blocks))

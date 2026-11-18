@@ -1,9 +1,9 @@
-from dataclasses import dataclass
 from webcapture.archive.schema import IntegrityError
 from webcapture.archive.evidence import body_digest
 from webcapture.archive.manifests import validate_manifest_structure
-from webcapture.delivery.reading import CaptureReadView, read_capture
-from webcapture.html.encoding import DecodedHtml, decode_html
+from webcapture.delivery.reading import (CaptureReadView, VerifiedCapture, read_capture,
+                                         STYLE_KIND)
+from webcapture.html.encoding import decode_html
 from webcapture.html.document import parse_document
 from webcapture.html.references import find_image_occurrences
 from webcapture.html.addresses import resolve_image_address
@@ -11,13 +11,10 @@ from webcapture.sources.requests import build_request
 from webcapture.sources.responses import validate_response
 
 
-@dataclass(frozen=True)
-class VerifiedCapture:
-    view: CaptureReadView
-    html: DecodedHtml
-
-
 def verify_read_view(view: CaptureReadView) -> VerifiedCapture:
+    if view.kind == STYLE_KIND:
+        from webcapture.delivery.style_verification import verify_style_read_view
+        return verify_style_read_view(view)
     try:
         manifest = view.manifest
         validate_manifest_structure(manifest)
